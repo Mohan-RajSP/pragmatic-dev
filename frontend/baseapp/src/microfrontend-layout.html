@@ -1,0 +1,22 @@
+<!--
+  single-spa-layout template (parsed as a string at build time).
+
+  Layout: a full-height flex row.
+    - queryapp (chat)  -> 70% main content
+    - tipsapp (tips)   -> 30% side panel (right)
+  Both are mounted as single-spa applications (parcels) by the shell.
+  A <route default> makes them active on every path for now.
+-->
+<single-spa-router>
+  <div class="flex h-screen w-screen overflow-hidden">
+    <route default>
+      <div class="flex-1 min-w-0 h-full">
+        <application name="@pragmatic-dev/queryapp"></application>
+      </div>
+      <aside class="h-full border-l border-gray-200 bg-gray-50" style="width: var(--panel-width)">
+        <application name="@pragmatic-dev/tipsapp"></application>
+      </aside>
+    </route>
+  </div>
+</single-spa-router>
+

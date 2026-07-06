@@ -1,0 +1,7 @@
+/* Global styles for the shell chrome only.
+   MFEs (tipsapp/queryapp) inject their own Tailwind INSIDE their shadow roots,
+   so these utilities don't leak into them. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+

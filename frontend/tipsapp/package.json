@@ -1,0 +1,35 @@
+{
+  "name": "@pragmatic-dev/tipsapp",
+  "version": "0.1.0",
+  "description": "Mental-health tips side panel (single-spa React MFE)",
+  "private": true,
+  "scripts": {
+    "start": "webpack serve --port 9001",
+    "build": "webpack --mode=production",
+    "serve": "node server.js",
+    "lint": "eslint src --ext ts,tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "single-spa-react": "^6.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/systemjs": "^6.13.5",
+    "autoprefixer": "^10.4.19",
+    "css-loader": "^7.1.2",
+    "postcss": "^8.4.38",
+    "postcss-loader": "^8.1.1",
+    "tailwindcss": "^3.4.4",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.5.2",
+    "webpack": "^5.92.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.0.4"
+  }
+}
+

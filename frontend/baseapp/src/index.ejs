@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pragmatic-dev</title>
+
+    <!--
+      Shared design tokens. CSS custom properties PIERCE the Shadow DOM boundary,
+      so the tips/query parcels (which isolate their Tailwind inside shadow roots)
+      can still consume these for a consistent theme.
+    -->
+    <style>
+      :root {
+        --brand: #4f46e5;
+        --brand-dark: #4338ca;
+        --panel-width: 30%;
+      }
+      html, body { margin: 0; height: 100%; }
+      #single-spa-layout { height: 100vh; }
+    </style>
+
+    <meta name="importmap-type" content="systemjs-importmap" />
+
+    <!-- Import map: how SystemJS resolves each module.
+         The parcels (tipsapp/queryapp) point at their dev servers for now. -->
+    <script type="systemjs-importmap">
+      {
+        "imports": {
+          "single-spa": "https://cdn.jsdelivr.net/npm/single-spa@6.0.1/lib/system/single-spa.min.js",
+          "react": "https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js",
+          "react-dom": "https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js",
+          "@pragmatic-dev/root-config": "<% if (isLocal) { %>//localhost:9000/pragmatic-dev-root-config.js<% } else { %>/pragmatic-dev-root-config.js<% } %>",
+          "@pragmatic-dev/tipsapp": "//localhost:9001/pragmatic-dev-tipsapp.js",
+          "@pragmatic-dev/queryapp": "//localhost:9002/pragmatic-dev-queryapp.js"
+        }
+      }
+    </script>
+
+    <!-- Lets you override import-map entries at runtime (dev tooling). -->
+    <script src="https://cdn.jsdelivr.net/npm/import-map-overrides@3.1.1/dist/import-map-overrides.js"></script>
+
+    <!-- SystemJS module loader + extras to consume UMD (react) bundles. -->
+    <script src="https://cdn.jsdelivr.net/npm/systemjs@6.15.1/dist/system.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/systemjs@6.15.1/dist/extras/amd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/systemjs@6.15.1/dist/extras/named-exports.min.js"></script>
+  </head>
+  <body>
+    <!-- single-spa-layout renders the applications into this element. -->
+    <main id="single-spa-layout"></main>
+
+    <script>
+      System.import("@pragmatic-dev/root-config");
+    </script>
+
+    <import-map-overrides-full
+      show-when-local-storage="devtools"
+      dev-libs
+    ></import-map-overrides-full>
+  </body>
+</html>
+

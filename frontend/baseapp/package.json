@@ -1,0 +1,35 @@
+{
+  "name": "@pragmatic-dev/root-config",
+  "version": "0.1.0",
+  "description": "single-spa root-config (shell) for Pragmatic-dev",
+  "private": true,
+  "scripts": {
+    "start": "webpack serve --port 9000",
+    "build": "webpack --mode=production",
+    "serve": "node server.js",
+    "lint": "eslint src --ext ts",
+    "format": "prettier --write \"src/**/*.{ts,css,html}\""
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "single-spa": "^6.0.1",
+    "single-spa-layout": "^2.2.0"
+  },
+  "devDependencies": {
+    "@types/systemjs": "^6.13.5",
+    "autoprefixer": "^10.4.19",
+    "css-loader": "^7.1.2",
+    "html-webpack-plugin": "^5.6.0",
+    "postcss": "^8.4.38",
+    "postcss-loader": "^8.1.1",
+    "style-loader": "^4.0.0",
+    "tailwindcss": "^3.4.4",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.5.2",
+    "webpack": "^5.92.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.0.4",
+    "webpack-merge": "^5.10.0"
+  }
+}
+
