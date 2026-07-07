@@ -7,6 +7,7 @@ import {
 
 import microfrontendLayout from "./microfrontend-layout.html";
 import "./styles/global.css";
+import { mountTechStack } from "./tech-stack";
 
 // 1. Parse the declarative layout into a routes tree.
 const routes = constructRoutes(microfrontendLayout);
@@ -26,6 +27,9 @@ const layoutEngine = constructLayoutEngine({ routes, applications });
 applications.forEach(registerApplication);
 layoutEngine.activate();
 start({ urlRerouteOnly: true });
+
+// 5. Mount the "Tech stack" showcase button + modal (shell-level chrome).
+mountTechStack();
 
 
 

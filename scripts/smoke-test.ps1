@@ -28,7 +28,7 @@ Write-Host "`n== Backend (direct :8000) ==" -ForegroundColor Cyan
 Test-Endpoint "health"          "http://localhost:8000/health"
 Test-Endpoint "openapi docs"    "http://localhost:8000/docs"
 Test-Endpoint "tip (may be null)" "http://localhost:8000/tip"
-Test-Endpoint "liveness"        "http://localhost:8000/tip/liveness"
+Test-Endpoint "liveness"        "http://localhost:8000/tip/liveness" -Method POST
 
 Write-Host "`n== Through nginx (:80) ==" -ForegroundColor Cyan
 Test-Endpoint "api health"      "http://localhost/api/health"
@@ -57,4 +57,5 @@ if ($fail -eq 0) {
     Write-Host ("{0} check(s) failed." -f $fail) -ForegroundColor Red
     exit 1
 }
+
 

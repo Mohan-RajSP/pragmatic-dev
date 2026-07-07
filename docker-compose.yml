@@ -72,6 +72,10 @@ services:
     # scale to multiple workers, split Beat back into its own service (see the
     # commented `beat` block below) — otherwise each worker would run its own
     # scheduler and enqueue duplicate periodic tasks.
+    #
+    # NOTE: embedded `--beat` works here because these containers run on LINUX.
+    # It is NOT supported on Windows, so LOCAL Windows dev must run `celery ...
+    # beat` in a separate terminal (see docs/local-commands.md).
     command:
       ["celery", "-A", "worker.celery_app", "worker", "--beat", "--loglevel=INFO", "--pool=threads", "--concurrency=2"]
     env_file:

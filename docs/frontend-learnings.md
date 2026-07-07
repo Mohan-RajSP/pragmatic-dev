@@ -333,6 +333,12 @@ common than a running server. Express is the container-friendly middle ground.
 The tipsapp calls the backend for tips (`/tip`, `/tip/history`, `/tip/stream`,
 `/tip/liveness`). **Where** those requests go depends on how you're running:
 
+> ⏸️ **Note (2026-07-07):** the `pragmatic-dev.in` production hosting is **on hold
+> pending domain verification**, so today only the **Local dev** row is exercised.
+> The `/api` (nginx) / `api.pragmatic-dev.in` paths below are the intended prod
+> setup and resume once the domain is verified (see
+> [`deployment-plan.md`](./deployment-plan.md)).
+
 | Setup | Page origin | API base | Why |
 |-------|-------------|----------|-----|
 | **Local dev** (no nginx) | `http://localhost:9000` (shell) | `http://localhost:8000` | Talk to FastAPI **directly**; there's no proxy to add `/api`. |

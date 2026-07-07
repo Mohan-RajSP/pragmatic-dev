@@ -31,6 +31,12 @@ function shadowDomElementGetter(props: { name: string }): HTMLElement {
     shadow.adoptedStyleSheets = [tailwindSheet];
   }
 
+  // The shadow host must fill its layout slot so the inner `h-full` flex chain
+  // resolves and the tips list (overflow-y-auto) becomes the scroll region —
+  // otherwise the list can't scroll and its content is clipped by the layout.
+  container.style.height = "100%";
+  container.style.minHeight = "0";
+
   let mountEl = shadow.querySelector<HTMLElement>("#tips-root");
   if (!mountEl) {
     mountEl = document.createElement("div");

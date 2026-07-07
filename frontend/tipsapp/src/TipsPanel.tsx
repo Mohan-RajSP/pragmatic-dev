@@ -118,7 +118,7 @@ export function TipsPanel(): React.ReactElement {
       {hasTips ? (
         // Tips exist → always show them, whether streaming or stopped. The
         // "waiting" placeholder only appears while actively streaming.
-        <ul className="flex-1 space-y-3 overflow-y-auto p-4">
+        <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
           {streaming && waiting && <WaitingCard />}
           {tips.map((tip, i) => (
             <TipCard key={tip.id} tip={tip} latest={i === 0} />
@@ -130,7 +130,7 @@ export function TipsPanel(): React.ReactElement {
       ) : streaming ? (
         // Streaming with an empty cache → waiting for the first generated tip.
         waiting ? (
-          <ul className="flex-1 space-y-3 overflow-y-auto p-4">
+          <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
             <WaitingCard />
           </ul>
         ) : (
