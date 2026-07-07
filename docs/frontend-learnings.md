@@ -25,6 +25,8 @@ TypeScript, Webpack, Tailwind). Companion to
 11. [Shadow DOM isolation for MFEs](#11-shadow-dom-isolation-for-mfes)
 12. [The one-line cheat-sheet](#12-the-one-line-cheat-sheet)
 13. [Building & serving (dev server vs Express)](#13-building--serving-dev-server-vs-express)
+14. [API base URL: `/api` (nginx) vs direct backend (local)](#14-api-base-url-api-nginx-vs-direct-backend-local)
+15. [Gotcha: import-map CDN paths (single-spa 404)](#15-gotcha-import-map-cdn-paths-single-spa-404)
 
 ---
 
@@ -323,6 +325,88 @@ static bundle.
 
 **Future:** MFE bundles are ultimately static assets → a CDN / S3 is even more
 common than a running server. Express is the container-friendly middle ground.
+
+---
+
+## 14. API base URL: `/api` (nginx) vs direct backend (local)
+
+The tipsapp calls the backend for tips (`/tip`, `/tip/history`, `/tip/stream`,
+`/tip/liveness`). **Where** those requests go depends on how you're running:
+
+| Setup | Page origin | API base | Why |
+|-------|-------------|----------|-----|
+| **Local dev** (no nginx) | `http://localhost:9000` (shell) | `http://localhost:8000` | Talk to FastAPI **directly**; there's no proxy to add `/api`. |
+| **Containerized / prod** | `http://localhost` / `pragmatic-dev.in` | `/api` | nginx routes `/api/*` → `backend:8000/*` (strips the prefix). |
+
+**Key insight — the backend has NO `/api` prefix.** Its routes are `/tip`,
+`/chat`, etc. (`api_prefix = ""`). The `/api` segment is **purely an nginx
+convention** so one origin can serve both the frontend (`/`) and the API
+(`/api/`). nginx's `proxy_pass http://backend:8000/;` (trailing slash) strips it:
+
+```
+browser → /api/tip/stream → nginx → backend:8000/tip/stream
+```
+
+**The bug this caused:** with the base hard-set to `/api`, running locally made
+the tipsapp request `http://localhost:9000/api/tip/stream` — i.e. the **baseapp
+Express server**, which knows nothing about `/api` → 404. There's no nginx
+locally to do the rewrite.
+
+**The fix (`tipsapp/src/config.ts`):** default the base to the backend origin and
+keep a runtime override for nginx/prod:
+
+```ts
+export const API_BASE =
+  window.__TIPS_API_BASE__ ?? "http://localhost:8000"; // local dev default
+// In the nginx/prod shell, set window.__TIPS_API_BASE__ = "/api" before load.
+```
+
+- **Same bundle, every environment** — no rebuild needed; the shell injects the
+  override per environment.
+- **CORS:** cross-origin calls (`:9000`/`:9001` → `:8000`) work because the
+  backend sets `cors_origins = ["*"]` in dev. `EventSource` (SSE) and the
+  header-less `POST /tip/liveness` are "simple" requests, so no preflight.
+- **Takeaway:** the frontend should never assume a proxy exists. Make the API
+  base **configurable**, default it to what works with zero infra (direct
+  backend), and let the proxy path be an explicit override.
+
+---
+
+## 15. Gotcha: import-map CDN paths (single-spa 404)
+
+Shared libs (`single-spa`, `react`, `react-dom`) are loaded from a CDN via the
+SystemJS import-map in `baseapp/src/index.ejs`. **SystemJS needs the `system`
+module format** — but a package's published folder layout is not guessable.
+
+**What broke:** `single-spa@6.0.1/lib/**system**/single-spa.min.js` → **404**.
+The package actually nests the format under an ES-target folder:
+
+```
+/lib/es5/system/single-spa.min.js       ✅  (use this — widest browser support)
+/lib/es2015/system/single-spa.min.js    ✅
+/lib/system/single-spa.min.js           ❌  (does not exist)
+```
+
+**How to find the real path** (don't guess) — query the jsdelivr data API:
+
+```powershell
+# List the actual files that ship in a version
+(Invoke-RestMethod "https://data.jsdelivr.com/v1/packages/npm/single-spa@6.0.1?structure=flat").files.name -match 'min\.js$'
+```
+
+**Learnings:**
+- SystemJS import-map entries must point at the **`system`** build of a lib, not
+  `esm`/`umd`/`cjs`. (React is the exception here — it has no `system` build, so
+  we load its **`umd`** bundle and rely on SystemJS's `amd` + `named-exports`
+  extras to consume it.)
+- CDN 404s **cache in the browser** ("404 from disk cache"). After fixing a URL,
+  **hard-refresh** (`Ctrl+Shift+R`) or disable cache — a normal reload keeps
+  serving the cached failure.
+- `index.ejs` is compiled into `dist/index.html` at build time, so after editing
+  the import-map you must **rebuild** (`npm run build`) for `node server.js` to
+  serve the change (webpack-dev-server / `npm start` picks it up automatically).
+
+**In our code:** `frontend/baseapp/src/index.ejs` (import-map + SystemJS extras).
 
 
 

@@ -10,7 +10,7 @@ function formatTime(unixSeconds: number): string {
       minute: "2-digit",
     });
   } catch {
-    return "";``
+    return "";
   }
 }
 
@@ -49,6 +49,24 @@ function EmptyState({ status }: { status: string }) {
   );
 }
 
+/** Shown when streaming is stopped — prompts the user to start it. */
+function IdleState({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+      <p className="mb-4 text-sm text-gray-500">
+        The tips stream is stopped. Start it to receive fresh mental-health tips.
+      </p>
+      <button
+        type="button"
+        onClick={onStart}
+        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700"
+      >
+        Start stream
+      </button>
+    </div>
+  );
+}
+
 /** Shown while the stream is alive but no new tip has arrived yet. */
 function WaitingCard() {
   return (
@@ -64,7 +82,8 @@ function WaitingCard() {
 }
 
 export function TipsPanel(): React.ReactElement {
-  const { tips, status, waiting } = useTips();
+  const { tips, status, waiting, streaming, initializing, start, stop } = useTips();
+  const hasTips = tips.length > 0;
 
   return (
     <div className="flex h-full flex-col bg-gray-50">
@@ -75,14 +94,41 @@ export function TipsPanel(): React.ReactElement {
               ? "bg-green-500"
               : status === "error"
                 ? "bg-red-500"
-                : "bg-amber-400"
+                : status === "connecting"
+                  ? "bg-amber-400"
+                  : "bg-gray-300"
           }`}
           title={`Stream: ${status}`}
         />
         <h2 className="text-sm font-semibold text-gray-700">Mental-health tips</h2>
+        <button
+          type="button"
+          onClick={streaming ? stop : start}
+          className={`ml-auto rounded-md px-3 py-1 text-xs font-semibold text-white shadow-sm transition-colors ${
+            streaming
+              ? "bg-red-500 hover:bg-red-600"
+              : "bg-indigo-600 hover:bg-indigo-700"
+          }`}
+          title={streaming ? "Stop the tips stream" : "Start the tips stream"}
+        >
+          {streaming ? "Stop stream" : "Start stream"}
+        </button>
       </header>
 
-      {tips.length === 0 ? (
+      {hasTips ? (
+        // Tips exist → always show them, whether streaming or stopped. The
+        // "waiting" placeholder only appears while actively streaming.
+        <ul className="flex-1 space-y-3 overflow-y-auto p-4">
+          {streaming && waiting && <WaitingCard />}
+          {tips.map((tip, i) => (
+            <TipCard key={tip.id} tip={tip} latest={i === 0} />
+          ))}
+        </ul>
+      ) : initializing ? (
+        // First load: history request still in flight.
+        <EmptyState status={status} />
+      ) : streaming ? (
+        // Streaming with an empty cache → waiting for the first generated tip.
         waiting ? (
           <ul className="flex-1 space-y-3 overflow-y-auto p-4">
             <WaitingCard />
@@ -91,12 +137,8 @@ export function TipsPanel(): React.ReactElement {
           <EmptyState status={status} />
         )
       ) : (
-        <ul className="flex-1 space-y-3 overflow-y-auto p-4">
-          {waiting && <WaitingCard />}
-          {tips.map((tip, i) => (
-            <TipCard key={tip.id} tip={tip} latest={i === 0} />
-          ))}
-        </ul>
+        // Stopped and no history yet → prompt to start.
+        <IdleState onStart={start} />
       )}
     </div>
   );

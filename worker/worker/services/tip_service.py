@@ -74,6 +74,38 @@ class TipService:
         self._redis.set(self._settings.tips_trigger_key, "false")
         logger.debug("Trigger flag cleared (set to false)")
 
+    def record_skip(self, reason: str) -> None:
+        """Record the latest skipped-generation event for the SSE stream to relay.
+
+        Stores a small JSON payload with a timestamp so the backend stream can
+        detect a *new* skip (by comparing `ts`) and emit a `skipped` SSE event.
+        A TTL keeps Redis tidy — the value only needs to outlive the poll window.
+        """
+        payload = {"reason": reason, "ts": time.time()}
+        self._redis.set(
+            self._settings.tips_skip_event_key,
+            json.dumps(payload),
+            ex=int(self._settings.tip_schedule_seconds * 2),
+        )
+        logger.debug("Recorded skip event (reason=%s)", reason)
+
+    def get_recent_tip_texts(self, limit: int | None = None) -> list[str]:
+        """Return recent tip texts (newest first) for anti-duplication context.
+
+        Used to prime the LLM prompt so it doesn't repeat or closely paraphrase
+        tips it already produced. Malformed entries are skipped defensively.
+        """
+        end = (limit - 1) if limit else -1
+        raw_items = self._redis.lrange(self._settings.tips_list_key, 0, end)
+        texts: list[str] = []
+        for raw in raw_items:
+            try:
+                texts.append(json.loads(raw)["text"])
+            except (json.JSONDecodeError, KeyError, TypeError):
+                # Skip a corrupt/legacy entry rather than fail the whole batch.
+                continue
+        return texts
+
     def add_tip(self, text: str) -> dict:
         """Create a tip record, push it as newest, and cap the list size.
 

@@ -27,6 +27,7 @@ from worker.chains.tip_chain import generate_tip_text
 from worker.constants import TIP_GENERATION_TASK
 from worker.core.config import get_settings
 from worker.core.logging import get_logger
+from worker.llm.errors import PermanentLLMError
 from worker.services.tip_service import get_tip_service
 
 logger = get_logger(__name__)
@@ -61,11 +62,31 @@ def generate_tip(self: Any, force: bool = False) -> dict[str, Any]:
 
         # Beat path: only generate when a client has recently pinged liveness.
         if not force and not service.is_triggered():
-            logger.info("Tip generation skipped: trigger not set (force=False)")
+            logger.info(
+                "Skipping creation of a new tip: liveness trigger flag is not set "
+                "in Redis (key=%s). No client activity since the last generation.",
+                settings.tips_trigger_key,
+            )
+            # Record the skip so the SSE stream can relay it to clients.
+            service.record_skip(reason="trigger_not_set")
             return {"status": "skipped", "reason": "trigger_not_set"}
 
         try:
-            text = generate_tip_text()
+            # Prime the prompt with recent tips so the model avoids repeats /
+            # close paraphrases (the LLM is stateless across calls otherwise).
+            recent_tips = service.get_recent_tip_texts()
+            text = generate_tip_text(recent_tips)
+        except PermanentLLMError as exc:
+            # Non-retryable (auth/quota/bad request). Retrying can't succeed with
+            # the current config, so end any active chain and give up immediately
+            # instead of wasting the retry budget.
+            service.clear_retry_in_progress()
+            logger.error(
+                "Tip generation failed permanently (%s); not retrying: %s",
+                type(exc).__name__,
+                exc,
+            )
+            return {"status": "failed", "reason": "permanent_error"}
         except Exception as exc:  # transient LLM/network errors -> retry
             countdown = min(
                 settings.tip_retry_base_delay * (2 ** self.request.retries),
@@ -79,7 +100,9 @@ def generate_tip(self: Any, force: bool = False) -> dict[str, Any]:
                     ttl=countdown + settings.tip_retry_marker_buffer
                 )
                 logger.warning(
-                    "Tip generation failed; retrying in %ss (attempt %d/%d)",
+                    "Tip generation failed (%s: %s); retrying in %ss (attempt %d/%d)",
+                    type(exc).__name__,
+                    exc,
                     countdown,
                     self.request.retries + 1,
                     self.max_retries,

@@ -8,15 +8,22 @@ Celery task name (see `.github/PLAN.md`).
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Anchor the .env path to the worker package root (this file lives at
+# worker/worker/core/config.py, so parents[2] == worker/). This makes settings
+# load correctly regardless of the current working directory the process is
+# launched from.
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
     """Strongly-typed worker settings loaded from the environment."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -40,6 +47,9 @@ class Settings(BaseSettings):
     # --- Tips generation ---
     tips_list_key: str = "tips:list"
     tips_trigger_key: str = "tips:trigger"
+    # Records the most recent "skipped generation" event so the backend SSE
+    # stream can relay it to clients (shared contract with the backend).
+    tips_skip_event_key: str = "tips:skip:last"
     tips_max_items: int = 10
     tip_schedule_seconds: float = 300.0
     # Beat-scheduled messages expire if not executed in time (prevents backlog

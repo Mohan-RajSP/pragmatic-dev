@@ -4,10 +4,13 @@
 # Services:
 #   redis    - cache + Celery broker/back-end
 #   backend  - FastAPI (tips + chat)          -> internal :8000
-#   worker   - Celery worker (consumes tasks)
-#   beat     - Celery Beat scheduler (enqueues periodic tips)
+#   worker   - Celery worker + EMBEDDED Beat (runs periodic tips via --beat)
 #   nginx    - reverse proxy                   -> published :80
 #   baseapp  - single-spa shell (frontend)     -> profile "frontend" (built later)
+#
+# NOTE: Beat is merged into the worker (`--beat`) for the single-worker phase.
+#       A standalone `beat` service is kept commented out for when we scale to
+#       multiple workers.
 #
 # Bring up the backend stack:      docker compose up --build
 # Include the frontend shell:      docker compose --profile frontend up --build
@@ -59,7 +62,18 @@ services:
   worker:
     build: ./worker
     restart: unless-stopped
-    command: ["celery", "-A", "worker.celery_app", "worker", "--loglevel=INFO"]
+    # Thread pool: the workload is I/O-bound (Redis + LLM calls), so threads give
+    # 2 concurrent slots while sharing one process's memory (cheaper than prefork,
+    # which would load LangChain per child process). Switch to prefork only when
+    # CPU-bound work is added (e.g. file parsing / local embedding for RAG).
+    #
+    # `--beat` runs the scheduler EMBEDDED in this worker (merged worker+beat) to
+    # save a task/container for the single-worker, cost-sensitive phase. When we
+    # scale to multiple workers, split Beat back into its own service (see the
+    # commented `beat` block below) — otherwise each worker would run its own
+    # scheduler and enqueue duplicate periodic tasks.
+    command:
+      ["celery", "-A", "worker.celery_app", "worker", "--beat", "--loglevel=INFO", "--pool=threads", "--concurrency=2"]
     env_file:
       - path: ./worker/.env
         required: false
@@ -72,21 +86,27 @@ services:
     networks:
       - pragmatic
 
-  beat:
-    build: ./worker
-    restart: unless-stopped
-    command: ["celery", "-A", "worker.celery_app", "beat", "--loglevel=INFO"]
-    env_file:
-      - path: ./worker/.env
-        required: false
-    environment:
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - pragmatic
+  # ---------------------------------------------------------------------------
+  # Standalone Celery Beat — DISABLED (merged into the worker via `--beat` above).
+  # Re-enable this as a separate service when running MORE THAN ONE worker, so a
+  # single scheduler owns the periodic schedule (prevents duplicate task enqueues).
+  # Remember to also drop `--beat` from the worker command when you do.
+  # ---------------------------------------------------------------------------
+  # beat:
+  #   build: ./worker
+  #   restart: unless-stopped
+  #   command: ["celery", "-A", "worker.celery_app", "beat", "--loglevel=INFO"]
+  #   env_file:
+  #     - path: ./worker/.env
+  #       required: false
+  #   environment:
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: "6379"
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - pragmatic
 
   nginx:
     image: nginx:1.27-alpine
@@ -124,6 +144,19 @@ services:
     ports:
       # Published so the browser can load the tips MFE bundle via the import-map.
       - "9001:9001"
+    profiles:
+      - frontend
+    networks:
+      - pragmatic
+
+  queryapp:
+    build: ./frontend/queryapp
+    restart: unless-stopped
+    expose:
+      - "9002"
+    ports:
+      # Published so the browser can load the chat MFE bundle via the import-map.
+      - "9002:9002"
     profiles:
       - frontend
     networks:

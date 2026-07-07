@@ -93,7 +93,7 @@ docker compose --profile frontend up --build
 |--------|------|-------------|
 | GET | `/api/health` | Service + Redis health |
 | GET | `/api/tip` | Latest mental-health tip |
-| GET | `/api/tip/liveness` | Liveness ping (triggers/force-starts tips) |
+| POST | `/api/tip/liveness` | Liveness ping (triggers/force-starts tips) |
 | GET | `/api/tip/stream` | SSE stream of the latest tip |
 | POST | `/api/chat` | Submit a chat message |
 | GET | `/api/chat/stream` | SSE stream of the assistant reply |
