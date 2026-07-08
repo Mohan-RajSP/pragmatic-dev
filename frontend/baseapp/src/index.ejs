@@ -24,7 +24,9 @@
     <meta name="importmap-type" content="systemjs-importmap" />
 
     <!-- Import map: how SystemJS resolves each module.
-         The parcels (tipsapp/queryapp) point at their dev servers for now. -->
+         Local dev → the parcels' dev servers (:9001/:9002).
+         Prod (CDN) → same-origin paths, since all bundles are served from the
+         same CloudFront distribution as this index.html. -->
     <script type="systemjs-importmap">
       {
         "imports": {
@@ -32,11 +34,21 @@
           "react": "https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js",
           "react-dom": "https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js",
           "@pragmatic-dev/root-config": "<% if (isLocal) { %>//localhost:9000/pragmatic-dev-root-config.js<% } else { %>/pragmatic-dev-root-config.js<% } %>",
-          "@pragmatic-dev/tipsapp": "//localhost:9001/pragmatic-dev-tipsapp.js",
-          "@pragmatic-dev/queryapp": "//localhost:9002/pragmatic-dev-queryapp.js"
+          "@pragmatic-dev/tipsapp": "<% if (isLocal) { %>//localhost:9001/pragmatic-dev-tipsapp.js<% } else { %>/pragmatic-dev-tipsapp.js<% } %>",
+          "@pragmatic-dev/queryapp": "<% if (isLocal) { %>//localhost:9002/pragmatic-dev-queryapp.js<% } else { %>/pragmatic-dev-queryapp.js<% } %>"
         }
       }
     </script>
+
+    <% if (!isLocal) { %>
+    <!-- Prod API base: the MFEs read these globals (falling back to
+         localhost:8000 in dev). In prod the backend is reached at the `api.`
+         subdomain via GoDaddy CNAME → ALB. -->
+    <script>
+      window.__TIPS_API_BASE__ = "https://api.pragmatic-dev.in";
+      window.__QUERY_API_BASE__ = "https://api.pragmatic-dev.in";
+    </script>
+    <% } %>
 
     <!-- Lets you override import-map entries at runtime (dev tooling). -->
     <script src="https://cdn.jsdelivr.net/npm/import-map-overrides@3.1.1/dist/import-map-overrides.js"></script>

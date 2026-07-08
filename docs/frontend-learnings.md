@@ -333,10 +333,11 @@ common than a running server. Express is the container-friendly middle ground.
 The tipsapp calls the backend for tips (`/tip`, `/tip/history`, `/tip/stream`,
 `/tip/liveness`). **Where** those requests go depends on how you're running:
 
-> ⏸️ **Note (2026-07-07):** the `pragmatic-dev.in` production hosting is **on hold
-> pending domain verification**, so today only the **Local dev** row is exercised.
-> The `/api` (nginx) / `api.pragmatic-dev.in` paths below are the intended prod
-> setup and resume once the domain is verified (see
+> ✅ **Note (2026-07-08):** the `pragmatic-dev.in` domain is **verified** and
+> hosting has resumed. In prod the SPA is served from CloudFront at
+> `app.pragmatic-dev.in` and calls the backend at `api.pragmatic-dev.in`, with
+> **DNS on GoDaddy** (`app`/`api` CNAMEs, apex forwarding — no Route 53). Local
+> dev still uses the direct `localhost:8000` path below (see
 > [`deployment-plan.md`](./deployment-plan.md)).
 
 | Setup | Page origin | API base | Why |
