@@ -108,10 +108,29 @@ foreach ($c in $Components) {
 }
 
 # 2. Docker login to ECR ----------------------------------------------------
+# NOTE: We deliberately AVOID `docker login`. On this machine ~/.docker/config.json
+# has "credsStore": "desktop", so `docker login` shells out to
+# docker-credential-desktop.exe, which BLOCKS forever in a non-interactive shell
+# (observed: aws-getpw DONE / docker-images DONE / docker-login HUNG >40s).
+# Instead we inject the ECR token directly into an isolated DOCKER_CONFIG that has
+# NO credsStore/credHelpers, then point every later docker call at it via the
+# DOCKER_CONFIG env var. This fully sidesteps the credential helper.
 if (-not $SkipPush) {
-  Write-Step "Logging Docker in to $Registry"
-  aws ecr get-login-password --region $Region | docker login --username AWS --password-stdin $Registry
-  if ($LASTEXITCODE -ne 0) { throw "docker login to ECR failed" }
+  Write-Step "Authenticating to $Registry (helper-free auth injection)"
+
+  $pw = (aws ecr get-login-password --region $Region)
+  if ($LASTEXITCODE -ne 0 -or -not $pw) { throw "aws ecr get-login-password failed" }
+
+  $auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("AWS:$pw"))
+
+  $DockerCfgDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ecrcfg-" + [Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $DockerCfgDir | Out-Null
+  $cfgJson = @{ auths = @{ $Registry = @{ auth = $auth } } } | ConvertTo-Json -Depth 5 -Compress
+  Set-Content -Path (Join-Path $DockerCfgDir "config.json") -Value $cfgJson -Encoding ascii
+
+  # Redirect ALL subsequent docker calls (build/push) at this helper-free config.
+  $env:DOCKER_CONFIG = $DockerCfgDir
+  Write-Host "  auth injected -> DOCKER_CONFIG=$DockerCfgDir" -ForegroundColor DarkGray
 }
 
 # 3 + 4. Build, tag, push ---------------------------------------------------
@@ -141,4 +160,10 @@ foreach ($c in $Components) {
   Write-Host ("  {0}/{1}:{2}  (+ :latest)" -f $Registry, $Map[$c].Repo, $Tag) -ForegroundColor Green
 }
 if ($SkipPush) { Write-Host "(built locally only; -SkipPush set, nothing pushed)" -ForegroundColor Yellow }
+
+# Cleanup: remove the isolated DOCKER_CONFIG (holds a short-lived ECR token).
+if ($DockerCfgDir -and (Test-Path $DockerCfgDir)) {
+  Remove-Item -Recurse -Force $DockerCfgDir -ErrorAction SilentlyContinue
+  Remove-Item Env:\DOCKER_CONFIG -ErrorAction SilentlyContinue
+}
 

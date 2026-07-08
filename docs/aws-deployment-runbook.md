@@ -190,6 +190,23 @@ Store `OPENAI_API_KEY` in **SSM Parameter Store (SecureString)** or **Secrets
 Manager**; the task definition injects it as an env var at runtime.
 - SSM Parameter Store: **free** for standard params (prefer this for cost).
 
+**✅ Done (2026-07-08).** Stored as a **SecureString**, Standard tier:
+- **Name:** `/pragmatic-dev/prod/OPENAI_API_KEY`
+- **ARN:** `arn:aws:ssm:ap-south-1:498341975274:parameter/pragmatic-dev/prod/OPENAI_API_KEY`
+- Created via `aws ssm put-parameter ... --type SecureString --overwrite` (value read
+  from `backend/.env`, never echoed to the terminal).
+
+In the ECS task definitions (7e), inject it under `secrets` (NOT `environment`):
+```json
+"secrets": [
+  { "name": "OPENAI_API_KEY",
+    "valueFrom": "arn:aws:ssm:ap-south-1:498341975274:parameter/pragmatic-dev/prod/OPENAI_API_KEY" }
+]
+```
+The task **execution role** needs `ssm:GetParameters` on that ARN (and `kms:Decrypt`
+on the default `alias/aws/ssm` key, which is covered by the AWS-managed key policy).
+To rotate: re-run `put-parameter --overwrite`; tasks pick up the new value on next start.
+
 ### 7c. ElastiCache — Redis
 1. Create **ElastiCache for Redis**, node **`cache.t4g.micro`**, single node.
 2. Put it in the same VPC; create a **subnet group** across 2 AZs.
@@ -239,6 +256,75 @@ invalidate `index.html`.
 
 ---
 
+## Phase 7 — ACTUAL DEPLOYMENT (Option A: EC2 + Elastic IP + CloudFront)
+
+> ⚠️ **This supersedes 7c–7h above.** We dropped the ALB (~$18/mo fixed) *and*
+> ElastiCache (~$12/mo) in favour of a single EC2 host running the existing
+> `docker-compose` stack (Redis co-located), fronted by CloudFront for free TLS.
+> DNS stays on GoDaddy. Rationale: cheapest path that still gives a stable,
+> HTTPS `api.pragmatic-dev.in`. Trade-off: single host (no auto-scaling/HA).
+
+**Architecture**
+```
+Browser (https)
+  ├─ app.pragmatic-dev.in ─▶ CloudFront ─▶ S3 (frontend)      [Phase 4]
+  └─ api.pragmatic-dev.in ─▶ CloudFront (ACM us-east-1 TLS)
+                               │ origin: ec2-3-108-103-76.ap-south-1.compute.amazonaws.com (HTTP:80)
+                               ▼
+                     EC2 t3.small (EIP 3.108.103.76)
+                       nginx:80 ─▶ backend:8000  (+ worker, redis)  [docker compose]
+```
+
+**Resources created (2026-07-08, ap-south-1 unless noted)**
+- **Security groups** (default VPC `vpc-00fb99848ac9fee29`):
+  - `pragmatic-dev-ec2-sg` = **`sg-0ccd767efa8212aae`** — inbound **80 from CloudFront
+    prefix list `pl-9aa247f3`** (`com.amazonaws.global.cloudfront.origin-facing`) only.
+  - (Earlier ALB/task/redis SGs `sg-0541a6fd424baa379` / `sg-0b785fa3ecd484b32` /
+    `sg-0f7c1fb2b8c6abd4f` are now unused — safe to delete.)
+- **IAM:** role `pragmatic-dev-ec2-role` + instance profile `pragmatic-dev-ec2-profile`.
+  Managed: `AmazonSSMManagedInstanceCore`, `AmazonEC2ContainerRegistryReadOnly`.
+  Inline `pragmatic-dev-ssm-read`: `ssm:GetParameter(s)` on
+  `/pragmatic-dev/prod/*` + `kms:Decrypt` via `ssm.ap-south-1`.
+- **EC2 instance:** **`i-0e2c5e7f1b3bc0fd2`** — AL2023 `ami-01971107641e9b67d`,
+  `t3.small`, subnet `subnet-0f1cc9f901b7c0212` (public, AZ 1a), no SSH key
+  (**SSM Session Manager** only). 2 GB swap added by bootstrap.
+- **Elastic IP:** **`3.108.103.76`** (`eipalloc-051e941b23173439b`,
+  assoc `eipassoc-0e82cff07d3127c23`). Stable origin DNS:
+  `ec2-3-108-103-76.ap-south-1.compute.amazonaws.com`.
+- **CloudFront:** dist **`ELRDDBNLBLH8J`**, domain **`d1c0fpxdm00xk7.cloudfront.net`**,
+  alt-domain `api.pragmatic-dev.in`, cert `…/9abf1d5d-…` (us-east-1, `*.pragmatic-dev.in`),
+  origin HTTP-only, viewer redirect-to-https, **CachingDisabled** +
+  **AllViewer** origin-request (SSE-friendly), all 7 methods, PriceClass_200.
+
+**Deploy artifacts (in `deploy/`)**
+- `docker-compose.ec2.yml` — Redis + backend(ECR) + worker(ECR) + nginx. No frontend.
+- `nginx.ec2.conf` — API origin: **`/` → backend:8000** (root, no `/api` strip), SSE off-buffer.
+- `ec2-user-data.sh` — first-boot: swap, Docker+Compose+AWS CLI, ECR login, fetch
+  `OPENAI_API_KEY` from SSM, write env/config, `docker compose up -d`.
+- `iam/*.json`, `cloudfront-api-config.json` — the exact policy/dist configs used.
+
+**Verified:** bootstrap completed, 4 containers up (`backend` healthy, `nginx`,
+`redis` healthy, `worker`); internal `curl http://localhost/health` → **200**,
+`/tip` → **200** `{"tip":null}`. CloudFront **Deployed**.
+
+### ✅ REMAINING (manual, on GoDaddy)
+Add a **CNAME**: **`api`** → **`d1c0fpxdm00xk7.cloudfront.net`** (record does not
+exist yet — NXDOMAIN). Once it propagates, `https://api.pragmatic-dev.in/health`
+should return **200** end-to-end, and the frontend chat/tips will work.
+
+### Operating the host
+- **Shell in:** `aws ssm start-session --target i-0e2c5e7f1b3bc0fd2 --region ap-south-1`
+- **Redeploy after new images:** on the box,
+  `cd /opt/pragmatic-dev && ECR_REGISTRY=498341975274.dkr.ecr.ap-south-1.amazonaws.com docker compose -f docker-compose.ec2.yml pull && docker compose -f docker-compose.ec2.yml up -d`
+- **Cost control (bring it down when idle):**
+  `aws ec2 stop-instances --instance-ids i-0e2c5e7f1b3bc0fd2` (⚠️ a stopped
+  instance still holds the EIP — **EIP on a stopped/unassociated instance is
+  billed ~$0.005/hr**; to fully zero out, also `release-address`
+  `eipalloc-051e941b23173439b`, but then the origin DNS changes and CloudFront's
+  origin must be updated on next start).
+
+---
+
 ## Phase 8 — Cost controls (single-user demo)
 
 - **Budget alarm** from Phase 0 (most important).
@@ -276,5 +362,10 @@ everything runs 24/7.
 - [x] Phase 6: frontend deploy script — `scripts/deploy-frontend.ps1` (build → S3 sync
   with cache headers → CloudFront `/*` invalidation; `-DryRun`, `-SkipBuild`, `-BundleMaxAge`).
 - [ ] Phase 7: ECR, secrets, ElastiCache, VPC/SGs, ECS, ALB + GoDaddy `api` CNAME
+- [x] **Phase 7 (Option A) — backend LIVE on EC2+EIP+CloudFront:** ECR images pushed
+  (`backend`/`worker`), `OPENAI_API_KEY` in SSM, EC2 `i-0e2c5e7f1b3bc0fd2` (EIP
+  `3.108.103.76`) running the compose stack, CloudFront `ELRDDBNLBLH8J`
+  (`d1c0fpxdm00xk7.cloudfront.net`) deployed. **Only remaining:** GoDaddy CNAME
+  `api` → `d1c0fpxdm00xk7.cloudfront.net`.
 - [ ] Phase 8: budget + scale-to-zero + Spot
 

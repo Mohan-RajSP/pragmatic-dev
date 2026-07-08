@@ -43,7 +43,7 @@
     <% if (!isLocal) { %>
     <!-- Prod API base: the MFEs read these globals (falling back to
          localhost:8000 in dev). In prod the backend is reached at the `api.`
-         subdomain via GoDaddy CNAME → ALB. -->
+         subdomain via GoDaddy CNAME → CloudFront → EC2 (nginx → FastAPI). -->
     <script>
       window.__TIPS_API_BASE__ = "https://api.pragmatic-dev.in";
       window.__QUERY_API_BASE__ = "https://api.pragmatic-dev.in";

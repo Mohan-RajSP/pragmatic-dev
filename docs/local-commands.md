@@ -102,7 +102,7 @@ celery -A worker.celery_app beat --loglevel=INFO
 - Fires `tips.generate` every **300s (5 min)**; first tick can take up to one full interval.
 - `beat: Starting..` **is** the ready state — it's silent between ticks at INFO level.
 
-> 💡 **Faster testing:** set `tip_schedule_seconds=20` in `worker/.env`, clear stale state, and restart Beat:
+>  **Faster testing:** set `tip_schedule_seconds=20` in `worker/.env`, clear stale state, and restart Beat:
 > ```powershell
 > Remove-Item C:\Users\mohanrajsp\Documents\Pragmatic-dev\worker\celerybeat-schedule* -ErrorAction SilentlyContinue
 > ```
